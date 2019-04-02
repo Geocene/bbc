@@ -6,8 +6,12 @@
 
 TEST(BBCAssertTest, BBCAssertTest_Test1)
 {
-    //BBC_ASSERT(false);
+    ASSERT_DEATH(BBC_ASSERT(false), "");
+    ASSERT_DEATH(BBC_ASSERT_R(false), "");
     
-    std::cout << "BBCAssertTest_Test1" << std::endl;
+    BBC_ASSERT(true);
+    BBC_ASSERT_R(true);
 }
+
+
 
