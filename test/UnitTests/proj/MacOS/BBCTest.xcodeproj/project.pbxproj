@@ -454,7 +454,10 @@
 		19F59A6822540709002ACE29 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
 				CODE_SIGN_STYLE = Automatic;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"DEBUG=1",
 					"$(inherited)",
@@ -468,10 +471,11 @@
 				);
 				LIBRARY_SEARCH_PATHS = ../../../../ext/boost/stage/lib;
 				OTHER_LDFLAGS = (
-					"-lboost_thread",
-					"-lboost_filesystem",
-					"-lboost_system",
 					"-lboost_log",
+					"-lboost_log_setup",
+					"-lboost_system",
+					"-lboost_filesystem",
+					"-lboost_thread",
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
@@ -480,7 +484,10 @@
 		19F59A6922540709002ACE29 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
 				CODE_SIGN_STYLE = Automatic;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_PREPROCESSOR_DEFINITIONS = BBC_USE_BOOST;
 				HEADER_SEARCH_PATHS = (
 					../../../../ext/googletest/googletest,
@@ -490,10 +497,11 @@
 				);
 				LIBRARY_SEARCH_PATHS = ../../../../ext/boost/stage/lib;
 				OTHER_LDFLAGS = (
-					"-lboost_thread",
-					"-lboost_filesystem",
-					"-lboost_system",
 					"-lboost_log",
+					"-lboost_log_setup",
+					"-lboost_system",
+					"-lboost_filesystem",
+					"-lboost_thread",
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};

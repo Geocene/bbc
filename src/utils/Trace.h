@@ -10,6 +10,23 @@
 #include "BBCMacros.h"
 #include "Singleton.h"
 
+#ifdef BBC_USE_BOOST
+#include <boost/log/core.hpp>
+#include <boost/log/trivial.hpp>
+#include <boost/log/expressions.hpp>
+#include <boost/log/sinks/text_file_backend.hpp>
+#include <boost/log/utility/setup/file.hpp>
+#include <boost/log/utility/setup/common_attributes.hpp>
+#include <boost/log/sources/severity_logger.hpp>
+#include <boost/log/sources/record_ostream.hpp>
+#include <boost/log/sinks/async_frontend.hpp>
+
+namespace logging = boost::log;
+namespace src = boost::log::sources;
+namespace sinks = boost::log::sinks;
+namespace keywords = boost::log::keywords;
+#endif
+
 #ifdef BBC_DEBUG
 #define BBC_TRACE(mask, ...) BBC_MACRO_BLOCK(Trace::instance().writeTrace(mask, __VA_ARGS__);)
 #else
@@ -135,6 +152,14 @@ if (0 == strcmp(iStr.c_str(), STRINGIFY(iVal))) \
         return kCategory_None;
     }
 
+private:
+    static void BoostCallback(const char* iMessage)
+    {
+        BOOST_LOG_TRIVIAL(error) << iMessage << std::endl;
+    }
+
+public:
+    
     bool initializeWithBuffer(const std::string& iTraceConfig, TraceCallback iCallback = nullptr, bool iUseBoost = true)
     {
         if (initalized_)
@@ -142,7 +167,17 @@ if (0 == strcmp(iStr.c_str(), STRINGIFY(iVal))) \
         
         processConfig(iTraceConfig);
         
-        callback_ = iCallback;
+        if (iUseBoost)
+        {
+            callback_ = BoostCallback;
+            boostCallback_ = iCallback;
+            initBoost();
+        }
+        else
+        {
+            callback_ = iCallback;
+        }
+        
         initalized_ = true;
         
         return true;
@@ -167,7 +202,17 @@ if (0 == strcmp(iStr.c_str(), STRINGIFY(iVal))) \
         
         fileStream.close();
         
-        callback_ = iCallback;
+        if (iUseBoost)
+        {
+            callback_ = BoostCallback;
+            boostCallback_ = iCallback;
+            initBoost();
+        }
+        else
+        {
+            callback_ = iCallback;
+        }
+
         initalized_ = true;
         
         return true;
@@ -175,6 +220,11 @@ if (0 == strcmp(iStr.c_str(), STRINGIFY(iVal))) \
 
     void reset()
     {
+#ifdef BBC_USE_BOOST
+        boost::log::core::get()->remove_all_sinks();
+        boostCallback_ = nullptr;
+#endif
+        
         initalized_ = false;
         
         traceAll_ = false;
@@ -205,13 +255,12 @@ if (0 == strcmp(iStr.c_str(), STRINGIFY(iVal))) \
             
             va_end(argList);
 
-
             if (callback_)
             {
                 callback_(traceMessage);
             }
             else
-            {                
+            {
                 std::cout << traceMessage << std::endl;
             }
         }
@@ -263,6 +312,48 @@ private:
         }
     }
     
+    void initBoost(const std::string& iLogFilePath = "")
+    {
+#ifdef BBC_USE_BOOST
+        if (iLogFilePath.length())
+        {
+            logging::add_file_log
+            (
+             //keywords::file_name = "sample_%N.log",                                        /*< file name pattern >*/
+             keywords::file_name = iLogFilePath,                                        /*< file name pattern >*/
+             keywords::rotation_size = 10 * 1024 * 1024,                                   /*< rotate files every 10 MiB... >*/
+             keywords::time_based_rotation = sinks::file::rotation_at_time_point(0, 0, 0), /*< ...or at midnight >*/
+             keywords::auto_flush = true,
+             keywords::format = "%Message%"                                 /*< log record format >*/
+             );
+        }
+        else
+        {
+            struct Sink: public sinks::basic_formatted_sink_backend<char, sinks::concurrent_feeding>
+            {
+                void consume (const boost::log::record_view& rec, const std::string& str)
+                {
+                    if (Trace::instance().boostCallback_)
+                    {
+                        Trace::instance().boostCallback_(str.c_str());
+                    }
+                }
+            };
+            
+            typedef sinks::asynchronous_sink<Sink> sink_t;
+            boost::shared_ptr<sink_t> sink (new sink_t());
+            boost::log::core::get()->add_sink (sink);
+        }
+        
+        logging::core::get()->set_filter
+        (
+         logging::trivial::severity >= logging::trivial::info
+         );
+
+        logging::add_common_attributes();
+#endif
+    }
+    
     static const int32_t sTraceMessageSize{2048};
     
     bool initalized_{false};
@@ -271,4 +362,5 @@ private:
     std::vector<TraceMask> masks_;
     
     TraceCallback callback_{nullptr};
+    TraceCallback boostCallback_{nullptr};
 };

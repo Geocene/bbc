@@ -17,7 +17,8 @@ TEST(TraceTest, TraceTest_Test4)
 
 TEST(TraceTest, TraceTest_Test1)
 {
-    Trace::instance().initializeWithBuffer("    kCategory_Basic@kPriority_Low \n   #kCategory_Basic@kPriority_High\nkCategory_Basic@kPriority_Medium", TestTraceCallback);
+    Trace::instance().initializeWithBuffer("    kCategory_Basic@kPriority_Low \n   #kCategory_Basic@kPriority_High\nkCategory_Basic@kPriority_Medium"
+                                           , TestTraceCallback);
     
     std::string worldStr = "world";
 
