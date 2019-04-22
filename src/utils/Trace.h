@@ -53,13 +53,27 @@ namespace keywords = boost::log::keywords;
 // 0x%jx or 0x%jX or %#018lllx or %#018lllX
 //
 
+///
+/// \brief Trace is a utility class for logging information in runtime code.
+///
 class Trace : public Singleton<Trace>
 {
 public:
     
+    /**
+     * \brief TraceMask is a typedef for the tracing mask.
+     */
     typedef uint64_t TraceMask;
+
+    /**
+     * \brief Prototype for the callback the client can install to receive trace statements.
+     */
     typedef void (*TraceCallback)(const char* iMessage);
 
+    /**
+     * Priority for the trace statements.
+     * Stored in the 4 most significant bits (MSB) of the TraceMask.
+     */
     enum Priority : uint64_t
     {
           kPriority_Off     = 0x0000000000000000
@@ -71,19 +85,31 @@ public:
         , kPriority_Always  = 0x4000000000000000
     };
 
+    /**
+     * Category for the trace statements.
+     * Stored in the 60 least significant bits (LSB) of the TraceMask.
+     */
     enum Category : uint64_t
     {
-          kCategory_None                = 0x0000000000000000
+          kCategory_Off                 = 0x0000000000000000
         
         , kCategory_Basic               = 0x0000000000000001
         
-        , kCategory_All                 = 0x0FFFFFFFFFFFFFFF
+        , kCategory_Always              = 0x0FFFFFFFFFFFFFFF
     };
 
 #define PRIORITY_TO_STRING(iVal) \
 if (iPriority == iVal) \
     return STRINGIFY(iVal);
     
+    /**
+     * Converts a Priority to a std::string.
+     * Note - asserts in debug builds if Priority is unknown.
+     *
+     * @param[in] iPriority to convert to std::string.
+     *
+     * @return std::string containing the std::string representation of the Priority
+     */
     static std::string priorityAsString(Priority iPriority)
     {
         PRIORITY_TO_STRING(kPriority_Off);
@@ -103,6 +129,14 @@ if (iPriority == iVal) \
 if (0 == strcmp(iStr.c_str(), STRINGIFY(iVal))) \
     return iVal;
 
+    /**
+     * Converts a std::string representation of a Priority to a Priority.
+     * Note - asserts in debug builds if Priority is unknown.
+     *
+     * @param[in] iStr representation of a Priority to convert to Priority.
+     *
+     * @return Priority the priority.
+     */
     static Priority stringToPriority(const std::string& iStr)
     {
         STRING_TO_PRIORITY(kPriority_Off);
@@ -122,11 +156,19 @@ if (0 == strcmp(iStr.c_str(), STRINGIFY(iVal))) \
 if (iCategory == iVal) \
     return STRINGIFY(iVal);
     
+    /**
+     * Converts a Category to a std::string.
+     * Note - asserts in debug builds if Category is unknown.
+     *
+     * @param[in] iCategory to convert to std::string.
+     *
+     * @return std::string containing the std::string representation of the Category
+     */
     static std::string categoryAsString(Category iCategory)
     {
-        CATEGORY_TO_STRING(kCategory_None);
+        CATEGORY_TO_STRING(kCategory_Off);
         CATEGORY_TO_STRING(kCategory_Basic);
-        CATEGORY_TO_STRING(kCategory_All);
+        CATEGORY_TO_STRING(kCategory_Always);
         
         BBC_ASSERT_R(!"categoryAsString - unknown iCategory!");
         
@@ -139,20 +181,43 @@ if (iCategory == iVal) \
 if (0 == strcmp(iStr.c_str(), STRINGIFY(iVal))) \
     return iVal;
     
+    /**
+     * Converts a std::string representation of a Category to a Category.
+     * Note - asserts in debug builds if Category is unknown.
+     *
+     * @param[in] iStr representation of a Category to convert to Category.
+     *
+     * @return Category the category.
+     */
     static Category stringToCategory(const std::string& iStr)
     {
-        STRING_TO_CATEGORY(kCategory_None);
+        STRING_TO_CATEGORY(kCategory_Off);
         STRING_TO_CATEGORY(kCategory_Basic);
-        STRING_TO_CATEGORY(kCategory_All);
+        STRING_TO_CATEGORY(kCategory_Always);
         
         BBC_ASSERT_R(!"stringToCategory - unknown iStr!");
         
         // Satisfy the return value
         //
-        return kCategory_None;
+        return kCategory_Off;
     }
 
 private:
+    
+    ///
+    /// Specialized callback for hooking into the Boost Logger layer.
+    ///
+    /// This callback is set to callback_ when Trace is configured to use
+    /// the Boost Logger layer.
+    ///
+    /// When the client calls writeTrace, this callback is triggered
+    /// and the trace statement is written to the Boost Logger layer.
+    /// When the Boost Logger Sink::consume layer is triggered,
+    /// the callback installed into boostCallback_ is triggered.
+    /// This is typically the callback installed by the client.
+    ///
+    /// @param[in] iMessage is the message to be written
+    ///
     static void BoostCallback(const char* iMessage)
     {
         BOOST_LOG_TRIVIAL(error) << iMessage << std::endl;
@@ -160,6 +225,15 @@ private:
 
 public:
     
+    /**
+     * Initializes Trace using a string containing the initilization parameters
+     *
+     * @param[in] iTraceConfig is the configuration information
+     * @param[in] iCallback the client callback for hooking into the Trace layer to recieve trace statements
+     * @param[in] iUseBoost true to enable Boost Logger layer
+     *
+     * @return bool true when successfully initialized, false with initalization failed.
+     */
     bool initializeWithBuffer(const std::string& iTraceConfig, TraceCallback iCallback = nullptr, bool iUseBoost = true)
     {
         if (initalized_)
@@ -183,6 +257,15 @@ public:
         return true;
     }
 
+    /**
+     * Initializes Trace using a file containing the initilization parameters
+     *
+     * @param[in] iTraceConfigFile is path to the file containing configuration information
+     * @param[in] iCallback the client callback for hooking into the Trace layer to recieve trace statements
+     * @param[in] iUseBoost true to enable Boost Logger layer
+     *
+     * @return bool true when successfully initialized, false with initalization failed.
+     */
     bool initializeWithFile(const std::string& iTraceConfigFile, TraceCallback iCallback = nullptr, bool iUseBoost = true)
     {
         if (initalized_)
@@ -218,6 +301,11 @@ public:
         return true;
     }
 
+    /**
+     * Resets the Trace class.
+     *
+     * Clears all callbacks and configuration information.
+     */
     void reset()
     {
 #ifdef BBC_USE_BOOST
@@ -233,12 +321,57 @@ public:
         callback_ = nullptr;
     }
 
+    /**
+     * Writes a statement to Trace
+     *
+     * @param[in] iMask the masking information for the statement to be traced
+     * @param[in] iArgs arguments to be traced, printf style.
+     */
     void writeTrace(TraceMask iMask, const char* iArgs...) const
     {
+        const uint64_t priorityMask = 0xF000000000000000;
+        
+        // Do not trace anything explicity set to off
+        //
+        if ((iMask & priorityMask) == kPriority_Off)
+        {
+            return;
+        }
+        
         bool doTrace = false;
         
-        if (iMask)
-            doTrace = true;
+        // Check for the all flag being enabled
+        //
+        if (traceAll_)
+        {
+            if (traceAllPriority_ == kPriority_Off)
+                return;
+            
+            if (iMask >= traceAllPriority_)
+                doTrace = true;
+        }
+        
+        // If we do not know about tracing yet
+        // Check all of the registered masks
+        //
+        if (!doTrace)
+        {
+            for (const auto& mask : masks_)
+            {
+                // Check the category
+                //
+                if ((mask & kCategory_Always) == (iMask & kCategory_Always))
+                {
+                    // Check the priority
+                    //
+                    if ((iMask & priorityMask) >= (mask & priorityMask))
+                    {
+                        doTrace = true;
+                        break;
+                    }
+                }
+            }
+        }
         
         if (doTrace)
         {
@@ -268,6 +401,11 @@ public:
     
 private:
     
+    /**
+     * Processes the configuration information.
+     *
+     * @param[in] iTraceConfig config string to be processed
+     */
     void processConfig(const std::string& iTraceConfig)
     {
         std::stringstream ss(iTraceConfig);
@@ -297,12 +435,26 @@ private:
             Category category = stringToCategory(categoryStr);
             Priority priority = stringToPriority(priorityStr);
             
+            // Skip any entry that is kPriority_Off
+            //
+            if (priority == kPriority_Off || category == kCategory_Off)
+                continue;
+            
             TraceMask mask = category | priority;
             
             // Filter duplicates
             //
             if (std::find (masks_.begin(), masks_.end(), mask) != masks_.end())
                 continue;
+            
+            // Record the all category and associated priority
+            // to make it easier to test for tracing
+            //
+            if (category == kCategory_Always)
+            {
+                traceAll_ = true;
+                traceAllPriority_ = priority;
+            }
             
             // Finally add the entry to the list
             //
@@ -312,6 +464,11 @@ private:
         }
     }
     
+    /**
+     * Initializes the Boost Logger layer.
+     *
+     * @param[in] iLogFilePath is path for the output file if used.
+     */
     void initBoost(const std::string& iLogFilePath = "")
     {
 #ifdef BBC_USE_BOOST
@@ -354,13 +511,32 @@ private:
 #endif
     }
     
+    /// Size of the trace buffer to write to
+    /// Any trace statement, including arguments, longer than this will be truncated.
     static const int32_t sTraceMessageSize{2048};
     
+    /// The initialization state of Trace
     bool initalized_{false};
     
+    /// Specialized flag to indicate all tracing is enabled
+    /// This is an optimization to prevent from processing
+    /// the masks_ std::vector to determine if a TraceMask is set
     bool traceAll_{false};
+    
+    /// Specialized flag to indicate all tracing priority is enabled
+    /// This is an optimization to prevent from processing
+    /// the masks_ std::vector to determine if a TraceMask is set
+    Priority traceAllPriority_{kPriority_Off};
+
+    /// List is registered TraceMasks
+    /// Used to determine if a trace statement should be written
     std::vector<TraceMask> masks_;
     
+    /// Pointer to the client callback.
+    /// See note in BoostCallback
     TraceCallback callback_{nullptr};
+    
+    /// Pointer to the Boost Logger callback.
+    /// See note in BoostCallback
     TraceCallback boostCallback_{nullptr};
 };
