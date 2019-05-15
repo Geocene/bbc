@@ -6,6 +6,8 @@
 #include "BBCAssert.h"
 #include "Singleton.h"
 
+// StartupOptions requires the use of Boost
+//
 #ifdef BBC_USE_BOOST
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/xml_parser.hpp>
@@ -15,12 +17,17 @@
 #include <exception>
 #include <iostream>
 using namespace boost::property_tree;
+#else
+static_assert(true, "StartupOptions::initialize - Requires BBC_USE_BOOST!");
 #endif
 
 /// Boost tag for reading attributes
 ///
 #define XMLATTR "<xmlattr>"
 
+/// Support for packing/parsing a StartupOptions file
+/// Used as XML data
+///
 #define SO_STARTUPOPTIONS "StartupOptions"
 #define SO_DOT "."
 #define SO_OPTION "Option"
@@ -28,15 +35,22 @@ using namespace boost::property_tree;
 #define SO_NAME "name"
 #define SO_VALUE "value"
 
+/// The following are the TypeName identifiers for supported StartupOptions.
+///
 #define SO_TYPENAME_BOOL "StartupOptionBool"
 #define SO_TYPENAME_INT32 "StartupOptionInt32"
 #define SO_TYPENAME_INT64 "StartupOptionInt64"
 #define SO_TYPENAME_FLOAT "StartupOptionFloat"
 #define SO_TYPENAME_STRING "StartupOptionString"
 
+/// Forward declarations needed by IStartupOptions
+///
 class StartupOptions;
 class StartupOption;
 
+///
+/// \brief IStartupOptions is a utility class for creating startup options.
+///
 class IStartupOptions : public Singleton<StartupOptions>
 {
     friend class StartupOptionBool;
@@ -47,36 +61,87 @@ class IStartupOptions : public Singleton<StartupOptions>
 
 public:
     
+    ///
+    /// Provides access to the IStartupOptions interface.
+    ///
     /// The interface needs it's own factory such that we can have access to the interface APIs.
     /// The base Singleton doesn't have all of the needed APIs.
+    ///
+    /// @return References to the IStartupOptions singleton
     ///
     static IStartupOptions& instance()
     {
         return reinterpret_cast<IStartupOptions&>(Singleton<StartupOptions>::instance());
     }
 
+    ///
+    /// Initializes the IStartupOptions with the contents of the StartupOption file.
+    ///
+    /// @param[in] iStartupOptionsFile is the path to a valid StartupOption file
+    ///
+    /// @return True if initialization was successful
+    ///
     virtual bool initialize(const std::string& iStartupOptionsFile) = 0;
 
+    ///
+    /// Writes a default StartupOption file with all known StartupOptions and their defaults.
+    ///
+    /// @param[in] iStartupOptionsFile is the path for the default StartupOption file
+    ///
+    /// @return True if the file was created successfully
+    ///
     virtual bool writeDefaultStartupOptionsFile(const std::string& iStartupOptionsFile) = 0;
     
 protected:
     
+    ///
+    /// Adds a StartupOption
+    ///
+    /// Note: This method asserts if duplicate StartupOptions are added.
+    ///       A duplicate is defined as a StartupOption with the same name
+    ///
+    /// @param[in] iOption is the StartupOption to add to the IStartupOptions singleton
+    ///
+    /// @return True if the StartupOption was added successfully
+    ///
     virtual bool add(StartupOption* iOption) = 0;
 };
 
+/**
+ * Base class for any StartupOption.
+ *
+ * Provides basic information about the name and type
+ */
 class StartupOption
 {
 public:
     
+    /// Constructor
     StartupOption() {}
 
+    /// Destructor
     virtual ~StartupOption() {}
-
+    
+    /**
+     * Returns the name of the option.
+     *
+     * Note - All StartupOptions must have a unique name.
+     *
+     * @return std::string containing the name of the StartupOption
+     */
     const std::string& name()
     {
         return name_;
     }
 
+    /**
+     * Returns the typeName of the option.
+     *
+     * The typeName is a textual representation of the type of StartupOption.
+     * See SO_TYPENAME_* for the available type names.
+     *
+     * @return std::string containing the name of the StartupOption
+     */
     const std::string& typeName()
     {
         return typeName_;
@@ -87,25 +152,45 @@ protected:
     std::string typeName_;
 };
 
+/**
+ * Templated base class for a type specific StartupOption
+ *
+ * Provides standard set, get, and type APIs
+ */
 template<class _class_>
 class StartupOptionTyped : public StartupOption
 {
 public:
     
+    /// Constructor
     StartupOptionTyped() {}
     
+    /// Destructor
     virtual ~StartupOptionTyped() {}
     
+    /**
+     * Sets the value of the StartupOption
+     */
     void set(const _class_& iVal)
     {
         value_ = iVal;
     }
     
+    /**
+     * Returns the default value of the StartupOption
+     *
+     * @return default value of _class_ type
+     */
     const _class_& getDefault()
     {
         return defaultValue_;
     }
     
+    /**
+     * Returns the value of the StartupOption
+     *
+     * @return value of _class_ type
+     */
     operator _class_()
     {
         return value_;
@@ -116,6 +201,9 @@ protected:
     _class_ defaultValue_;
 };
 
+/**
+ * StartupOptionBool for boolean types
+ */
 class StartupOptionBool : public StartupOptionTyped<bool>
 {
 public:
@@ -136,6 +224,9 @@ private:
     
 };
 
+/**
+ * StartupOptionInt32 for int32_t types
+ */
 class StartupOptionInt32 : public StartupOptionTyped<int32_t>
 {
 public:
@@ -156,6 +247,9 @@ private:
     
 };
 
+/**
+ * StartupOptionInt64 for int64_t types
+ */
 class StartupOptionInt64 : public StartupOptionTyped<int64_t>
 {
 public:
@@ -176,6 +270,9 @@ private:
     
 };
 
+/**
+ * StartupOptionFloat for float (32-bit floating point) types
+ */
 class StartupOptionFloat : public StartupOptionTyped<float>
 {
 public:
@@ -196,6 +293,9 @@ private:
     
 };
 
+/**
+ * StartupOptionString for std::string types
+ */
 class StartupOptionString : public StartupOptionTyped<std::string>
 {
 public:
@@ -215,17 +315,24 @@ private:
     
 };
 
+/**
+ * Concrete implemntation for StartupOptions.
+ */
 class StartupOptions : protected IStartupOptions
 {
 public:
     
+    // Basic information and format for a StartupOptions file
+    //
     /*
+     <?xml version="1.0" encoding="utf-8"?>
      <StartupOptions>
-     <Option type="StartupOptionBool" name="StartupOptionBoolName" value="true"/>
-     <Option type="StartupOptionInt32" name="StartupOptionInt32Name" value="0xffffffff"/f>
-     <Option type="StartupOptionInt64" name="StartupOptionInt64Name" value="0xffffffffffffffff"/>
-     <Option type="StartupOptionFloat" name="StartupOptionFloatName" value="3.14"/>
-     <Option type="StartupOptionString" name="StartupOptionStringName" value="Hello world!"/>
+         <Option type="StartupOptionBool" name="StartupOptionBoolName" value="true"/>
+         <Option type="StartupOptionInt32" name="StartupOptionInt32Name" value="0xffffffff"/f>
+         <Option type="StartupOptionInt64" name="StartupOptionInt64Name" value="0xffffffffffffffff"/>
+         <Option type="StartupOptionFloat" name="StartupOptionFloatName" value="3.14"/>
+         <Option type="StartupOptionString" name="StartupOptionStringName" value="Hello world!"/>
+     </StartupOptions>
      */
     
     bool initialize(const std::string& iStartupOptionsFile)
@@ -330,7 +437,7 @@ public:
             return false;
         }
 #else
-        BBC_ASSERT_R(!"StartupOptions::initialize - Requires BBC_USE_BOOST!");
+        static_assert(false, "StartupOptions::initialize - Requires BBC_USE_BOOST!");
 #endif
         
         return false;
@@ -409,7 +516,7 @@ public:
         
         return true;
 #else
-        BBC_ASSERT_R(!"StartupOptions::writeDefaultStartupOptionsFile - Requires BBC_USE_BOOST!");
+        static_assert(false, "StartupOptions::initialize - Requires BBC_USE_BOOST!");
 #endif
         return true;
     }
@@ -433,6 +540,8 @@ private:
     ///
     bool initalized_{false};
     
+    /// List of added StartupOptions
+    /// StartupOptions are added
     std::vector<StartupOption*> options_;
 };
 
