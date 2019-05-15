@@ -7,6 +7,13 @@
 
 #include "BBCMacros.h"
 
+/**
+ * \brief Defines custom assert macros for debug and release builds.
+ *
+ * These are prefered over using assert directly.
+ *
+ */
+
 #ifdef BBC_DEBUG
 #define BBC_ASSERT(x) BBC_MACRO_BLOCK( assert(x); )
 #else
