@@ -53,14 +53,14 @@ namespace keywords = boost::log::keywords;
 /*
  WIP...
  
- #define BBC_TRACE_LINE_INFO __FILE__, STRINGIFY(: __LINE__)
- 
- #ifdef BBC_DEBUG
- #define BBC_TRACE_LINE(mask, ...) BBC_MACRO_BLOCK(Trace::instance().writeTrace(mask, __FILE__, __VA_ARGS__);)
- #else
- #define BBC_TRACE_LINE(...)
- #endif
- */
+#define BBC_TRACE_LINE_INFO __FILE__, STRINGIFY(: __LINE__)
+
+#ifdef BBC_DEBUG
+#define BBC_TRACE_LINE(mask, ...) BBC_MACRO_BLOCK(Trace::instance().writeTrace(mask, __FILE__, __VA_ARGS__);)
+#else
+#define BBC_TRACE_LINE(...)
+#endif
+*/
 
 #define BBC_TRACE_R(mask, ...) BBC_MACRO_BLOCK(Trace::instance().writeTrace(mask, __VA_ARGS__);)
 
@@ -81,12 +81,12 @@ public:
      * \brief TraceMask is a typedef for the tracing mask.
      */
     typedef uint64_t TraceMask;
-    
+
     /**
      * \brief Prototype for the callback the client can install to receive trace statements.
      */
     typedef void (*TraceCallback)(const char* iMessage);
-    
+
     /**
      * Priority for the trace statements.
      * Stored in the 4 most significant bits (MSB) of the TraceMask.
@@ -94,14 +94,14 @@ public:
     enum Priority : uint64_t
     {
           kPriority_Off     = 0x0000000000000000
-        
+
         , kPriority_Low     = 0x1000000000000000
         , kPriority_Medium  = 0x2000000000000000
         , kPriority_High    = 0x3000000000000000
-        
+
         , kPriority_Always  = 0x4000000000000000
     };
-    
+
     /**
      * Category for the trace statements.
      * Stored in the 60 least significant bits (LSB) of the TraceMask.
@@ -111,10 +111,11 @@ public:
           kCategory_Off                 = 0x0000000000000000
         
         , kCategory_Basic               = 0x0000000000000001
-        
+        , kCategory_CommMgr             = 0x0000000000000002
+
         , kCategory_Always              = 0x0FFFFFFFFFFFFFFF
     };
-    
+
 #define PRIORITY_TO_STRING(iVal) \
 if (iPriority == iVal) \
     return STRINGIFY(iVal);
@@ -134,18 +135,18 @@ if (iPriority == iVal) \
         PRIORITY_TO_STRING(kPriority_Medium);
         PRIORITY_TO_STRING(kPriority_High);
         PRIORITY_TO_STRING(kPriority_Always);
-        
+
         BBC_ASSERT(!"priorityAsString - unknown iPriority!");
-        
+
         // Satisfy the return value
         //
         return "";
     }
-    
+
 #define STRING_TO_PRIORITY(iVal) \
 if (0 == strcmp(iStr.c_str(), STRINGIFY(iVal))) \
     return iVal;
-    
+
     /**
      * Converts a std::string representation of a Priority to a Priority.
      * Note - asserts in debug builds if Priority is unknown.
@@ -161,14 +162,14 @@ if (0 == strcmp(iStr.c_str(), STRINGIFY(iVal))) \
         STRING_TO_PRIORITY(kPriority_Medium);
         STRING_TO_PRIORITY(kPriority_High);
         STRING_TO_PRIORITY(kPriority_Always);
-        
+
         BBC_ASSERT(!"stringToPriority - unknown iStr!");
         
         // Satisfy the return value
         //
         return kPriority_Off;
     }
-    
+
 #define CATEGORY_TO_STRING(iVal) \
 if (iCategory == iVal) \
     return STRINGIFY(iVal);
@@ -185,6 +186,7 @@ if (iCategory == iVal) \
     {
         CATEGORY_TO_STRING(kCategory_Off);
         CATEGORY_TO_STRING(kCategory_Basic);
+        CATEGORY_TO_STRING(kCategory_CommMgr);
         CATEGORY_TO_STRING(kCategory_Always);
         
         BBC_ASSERT_R(!"categoryAsString - unknown iCategory!");
@@ -210,6 +212,7 @@ if (0 == strcmp(iStr.c_str(), STRINGIFY(iVal))) \
     {
         STRING_TO_CATEGORY(kCategory_Off);
         STRING_TO_CATEGORY(kCategory_Basic);
+        STRING_TO_CATEGORY(kCategory_CommMgr);
         STRING_TO_CATEGORY(kCategory_Always);
         
         BBC_ASSERT_R(!"stringToCategory - unknown iStr!");
@@ -218,7 +221,7 @@ if (0 == strcmp(iStr.c_str(), STRINGIFY(iVal))) \
         //
         return kCategory_Off;
     }
-    
+
 private:
     
     ///
@@ -239,7 +242,7 @@ private:
     {
         BOOST_LOG_TRIVIAL(error) << iMessage << std::endl;
     }
-    
+
 public:
     
     /**
@@ -276,7 +279,7 @@ public:
         
         return true;
     }
-    
+
     /**
      * Initializes Trace using a file containing the initilization parameters
      *
@@ -302,7 +305,7 @@ public:
         //
         if (!fileStream.is_open())
             return false;
-        
+
         std::stringstream buffer;
         buffer << fileStream.rdbuf();
         processConfig(buffer.str());
@@ -323,7 +326,7 @@ public:
         
         return true;
     }
-    
+
     /**
      * Resets the Trace class.
      *
@@ -343,7 +346,7 @@ public:
         
         callback_ = nullptr;
     }
-    
+
     /**
      * Writes a statement to Trace
      *
@@ -413,7 +416,7 @@ public:
             vsnprintf(traceMessage, sTraceMessageSize, iArgs, argList);
             
             va_end(argList);
-            
+
             if (callback_)
             {
                 callback_(traceMessage);
@@ -442,7 +445,7 @@ private:
             // Fancy regex trimming
             //
             line = std::regex_replace(line, std::regex("^ +| +$|( ) +"), "$1");
-            
+
             // Check for # indicating a commented out value
             //
             if (line.length() && line[0] == '#')
@@ -452,12 +455,12 @@ private:
             //
             std::string categoryStr = line.substr(0, line.find("@"));
             std::string priorityStr = line.substr(line.find("@") + 1, line.length());
-            
+
             // Trim leading and trailing spaces
             //
             categoryStr = std::regex_replace(categoryStr, std::regex("^ +| +$|( ) +"), "$1");
             priorityStr = std::regex_replace(priorityStr, std::regex("^ +| +$|( ) +"), "$1");
-            
+
             Category category = stringToCategory(categoryStr);
             Priority priority = stringToPriority(priorityStr);
             
@@ -534,7 +537,7 @@ private:
         (
          logging::trivial::severity >= logging::trivial::info
          );
-        
+
         logging::add_common_attributes();
         
         // For a trace to make sure the file is created
@@ -548,7 +551,7 @@ private:
             std::cerr << "Failed to create boost log file!\n";
             return false;
         }
-        
+
         return true;
 #endif
     }
@@ -569,7 +572,7 @@ private:
     /// This is an optimization to prevent from processing
     /// the masks_ std::vector to determine if a TraceMask is set
     Priority traceAllPriority_{kPriority_Off};
-    
+
     /// List is registered TraceMasks
     /// Used to determine if a trace statement should be written
     std::vector<TraceMask> masks_;
