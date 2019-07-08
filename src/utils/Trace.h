@@ -188,7 +188,7 @@ if (iCategory == iVal) \
         CATEGORY_TO_STRING(kCategory_Basic);
         CATEGORY_TO_STRING(kCategory_CommMgr);
         CATEGORY_TO_STRING(kCategory_Always);
-        
+
         BBC_ASSERT_R(!"categoryAsString - unknown iCategory!");
         
         // Satisfy the return value
@@ -214,7 +214,7 @@ if (0 == strcmp(iStr.c_str(), STRINGIFY(iVal))) \
         STRING_TO_CATEGORY(kCategory_Basic);
         STRING_TO_CATEGORY(kCategory_CommMgr);
         STRING_TO_CATEGORY(kCategory_Always);
-        
+
         BBC_ASSERT_R(!"stringToCategory - unknown iStr!");
         
         // Satisfy the return value
@@ -375,7 +375,10 @@ public:
         {
             if (traceAllPriority_ == kPriority_Off)
                 return;
-            
+
+            if (kPriority_Always == traceAllPriority_)
+                doTrace = true;
+
             if (iMask >= traceAllPriority_)
                 doTrace = true;
         }
@@ -391,6 +394,12 @@ public:
                 //
                 if ((mask & kCategory_Always) == (iMask & kCategory_Always))
                 {
+                    if (kPriority_Always == (mask & priorityMask))
+                    {
+                        doTrace = true;
+                        break;
+                    }
+
                     // Check the priority
                     //
                     if ((iMask & priorityMask) >= (mask & priorityMask))
@@ -448,7 +457,7 @@ private:
 
             // Check for # indicating a commented out value
             //
-            if (line.length() && line[0] == '#')
+            if ((line.length() == 0) || (line.length() && line[0] == '#'))
                 continue;
             
             // Split at the @
