@@ -46,23 +46,26 @@ namespace keywords = boost::log::keywords;
 
 #ifdef BBC_DEBUG
 #define BBC_TRACE(mask, ...) BBC_MACRO_BLOCK(Trace::instance().writeTrace(mask, __VA_ARGS__);)
+#define BBC_TRACE_MEM(mask, ...) BBC_MACRO_BLOCK(Trace::instance().writeMemory(mask, __VA_ARGS__);)
 #else
 #define BBC_TRACE(...)
+#define BBC_TRACE_MEM(...)
 #endif
 
 /*
  WIP...
  
- #define BBC_TRACE_LINE_INFO __FILE__, STRINGIFY(: __LINE__)
- 
- #ifdef BBC_DEBUG
- #define BBC_TRACE_LINE(mask, ...) BBC_MACRO_BLOCK(Trace::instance().writeTrace(mask, __FILE__, __VA_ARGS__);)
- #else
- #define BBC_TRACE_LINE(...)
- #endif
- */
+#define BBC_TRACE_LINE_INFO __FILE__, STRINGIFY(: __LINE__)
+
+#ifdef BBC_DEBUG
+#define BBC_TRACE_LINE(mask, ...) BBC_MACRO_BLOCK(Trace::instance().writeTrace(mask, __FILE__, __VA_ARGS__);)
+#else
+#define BBC_TRACE_LINE(...)
+#endif
+*/
 
 #define BBC_TRACE_R(mask, ...) BBC_MACRO_BLOCK(Trace::instance().writeTrace(mask, __VA_ARGS__);)
+#define BBC_TRACE_MEM_R(mask, ...) BBC_MACRO_BLOCK(Trace::instance().writeMemory(mask, __VA_ARGS__);)
 
 #define BBC_BOOL_TO_STRING(x) x ? "true" : "false"
 
@@ -81,12 +84,12 @@ public:
      * \brief TraceMask is a typedef for the tracing mask.
      */
     typedef uint64_t TraceMask;
-    
+
     /**
      * \brief Prototype for the callback the client can install to receive trace statements.
      */
     typedef void (*TraceCallback)(const char* iMessage);
-    
+
     /**
      * Priority for the trace statements.
      * Stored in the 4 most significant bits (MSB) of the TraceMask.
@@ -94,14 +97,14 @@ public:
     enum Priority : uint64_t
     {
           kPriority_Off     = 0x0000000000000000
-        
+
         , kPriority_Low     = 0x1000000000000000
         , kPriority_Medium  = 0x2000000000000000
         , kPriority_High    = 0x3000000000000000
-        
+
         , kPriority_Always  = 0x4000000000000000
     };
-    
+
     /**
      * Category for the trace statements.
      * Stored in the 60 least significant bits (LSB) of the TraceMask.
@@ -111,10 +114,10 @@ public:
           kCategory_Off                 = 0x0000000000000000
         
         , kCategory_Basic               = 0x0000000000000001
-        
+
         , kCategory_Always              = 0x0FFFFFFFFFFFFFFF
     };
-    
+
 #define PRIORITY_TO_STRING(iVal) \
 if (iPriority == iVal) \
     return STRINGIFY(iVal);
@@ -134,18 +137,18 @@ if (iPriority == iVal) \
         PRIORITY_TO_STRING(kPriority_Medium);
         PRIORITY_TO_STRING(kPriority_High);
         PRIORITY_TO_STRING(kPriority_Always);
-        
+
         BBC_ASSERT(!"priorityAsString - unknown iPriority!");
-        
+
         // Satisfy the return value
         //
         return "";
     }
-    
+
 #define STRING_TO_PRIORITY(iVal) \
 if (0 == strcmp(iStr.c_str(), STRINGIFY(iVal))) \
     return iVal;
-    
+
     /**
      * Converts a std::string representation of a Priority to a Priority.
      * Note - asserts in debug builds if Priority is unknown.
@@ -161,14 +164,14 @@ if (0 == strcmp(iStr.c_str(), STRINGIFY(iVal))) \
         STRING_TO_PRIORITY(kPriority_Medium);
         STRING_TO_PRIORITY(kPriority_High);
         STRING_TO_PRIORITY(kPriority_Always);
-        
+
         BBC_ASSERT(!"stringToPriority - unknown iStr!");
         
         // Satisfy the return value
         //
         return kPriority_Off;
     }
-    
+
 #define CATEGORY_TO_STRING(iVal) \
 if (iCategory == iVal) \
     return STRINGIFY(iVal);
@@ -186,7 +189,7 @@ if (iCategory == iVal) \
         CATEGORY_TO_STRING(kCategory_Off);
         CATEGORY_TO_STRING(kCategory_Basic);
         CATEGORY_TO_STRING(kCategory_Always);
-        
+
         BBC_ASSERT_R(!"categoryAsString - unknown iCategory!");
         
         // Satisfy the return value
@@ -211,14 +214,14 @@ if (0 == strcmp(iStr.c_str(), STRINGIFY(iVal))) \
         STRING_TO_CATEGORY(kCategory_Off);
         STRING_TO_CATEGORY(kCategory_Basic);
         STRING_TO_CATEGORY(kCategory_Always);
-        
+
         BBC_ASSERT_R(!"stringToCategory - unknown iStr!");
         
         // Satisfy the return value
         //
         return kCategory_Off;
     }
-    
+
 private:
     
     ///
@@ -239,7 +242,7 @@ private:
     {
         BOOST_LOG_TRIVIAL(error) << iMessage << std::endl;
     }
-    
+
 public:
     
     /**
@@ -276,7 +279,7 @@ public:
         
         return true;
     }
-    
+
     /**
      * Initializes Trace using a file containing the initilization parameters
      *
@@ -302,7 +305,7 @@ public:
         //
         if (!fileStream.is_open())
             return false;
-        
+
         std::stringstream buffer;
         buffer << fileStream.rdbuf();
         processConfig(buffer.str());
@@ -323,7 +326,7 @@ public:
         
         return true;
     }
-    
+
     /**
      * Resets the Trace class.
      *
@@ -343,7 +346,120 @@ public:
         
         callback_ = nullptr;
     }
+
     
+    /**
+     * Writes a statement to Trace
+     *
+     * @param[in] iMask the masking information for the statement to be traced
+     */
+    void writeMemory(TraceMask iMask, void* iBuffer, int32_t iLength) const
+    {
+        if (!testTraceMask(iMask))
+            return;
+        
+        // Print the memory buffer in hex
+        // must include terminiating character
+        //
+        char traceMessage[sTraceMessageSize];
+        memset(traceMessage, 0, sTraceMessageSize);
+        
+        for (int i = 0; i < iLength; i++)
+        {
+            char tmp = static_cast<char*>(iBuffer)[i];
+            
+            // Print with a space in between hex characters
+            // Example: FF FF FF FF
+            //
+            snprintf(traceMessage + (i*3), sTraceMessageSize - (i*3), "%02X ", (unsigned char)tmp);
+        }
+        
+        // Delete the trailing space
+        //
+        size_t len = strlen(traceMessage);
+        if (len > 0)
+        {
+            memset(traceMessage + (len - 1), 0x0, 1);
+        }
+        
+        if (callback_)
+        {
+            callback_(traceMessage);
+        }
+        else
+        {
+            std::cout << traceMessage << std::endl;
+        }
+    }
+    /**
+     * Writes a statement to Trace
+     *
+     * @param[in] iMask the masking information for the statement to be traced
+     * @param[in] iArgs arguments to be traced, printf style.
+     */
+    void writeMemory(TraceMask iMask, void* iBuffer, int32_t iLength, const char* iArgs...) const
+    {
+        if (!testTraceMask(iMask))
+            return;
+        
+        // Print the memory buffer in hex
+        // must include terminiating character
+        //
+        char memBuffer[sTraceMessageSize];
+        memset(memBuffer, 0, sTraceMessageSize);
+        
+        for (int i = 0; i < iLength; i++)
+        {
+            char tmp = static_cast<char*>(iBuffer)[i];
+            
+            // Print with a space in between hex characters
+            // Example: FF FF FF FF
+            //
+            snprintf(memBuffer + (i*3), sTraceMessageSize - (i*3), "%02X ", (unsigned char)tmp);
+        }
+
+        // Buffer to print the message to,
+        // must include terminiating character
+        //
+        char traceMessage[sTraceMessageSize];
+        memset(traceMessage, 0, sTraceMessageSize);
+
+        // Print the message
+        //
+        va_list argList;
+        va_start(argList, iArgs);
+        
+        vsnprintf(traceMessage, sTraceMessageSize, iArgs, argList);
+        
+        va_end(argList);
+        
+        // Copy over the memory printout
+        // Note - don't copy over the last character which is a trailing space
+        //
+        size_t len = strlen(traceMessage);
+        if (len > 0)
+        {
+            // Add in a separator for the message
+            //
+            snprintf(traceMessage + len, sTraceMessageSize - len, " - ");
+
+            // Update the length
+            //
+            len = strlen(traceMessage);
+        }
+        
+        memcpy(traceMessage + len, memBuffer, (iLength*3) - 1);
+        
+        if (callback_)
+        {
+            callback_(traceMessage);
+        }
+        else
+        {
+            std::cout << traceMessage << std::endl;
+        }
+    }
+
     /**
      * Writes a statement to Trace
      *
@@ -352,8 +468,45 @@ public:
      */
     void writeTrace(TraceMask iMask, const char* iArgs...) const
     {
-        if (!initalized_)
+        if (!testTraceMask(iMask))
             return;
+       
+        va_list argList;
+        va_start(argList, iArgs);
+        
+        // Buffer to print the message to,
+        // must include terminiating character
+        //
+        char traceMessage[sTraceMessageSize];
+        memset(traceMessage, 0, sTraceMessageSize);
+        
+        vsnprintf(traceMessage, sTraceMessageSize, iArgs, argList);
+        
+        va_end(argList);
+
+        if (callback_)
+        {
+            callback_(traceMessage);
+        }
+        else
+        {
+            std::cout << traceMessage << std::endl;
+        }
+    }
+    
+private:
+    
+    /**
+     * Determines if the iMask has been enabled for tracing.
+     *
+     * @param[in] iMask mask to test
+     *
+     * @return true the iMask is enabled for tracing. false otherwise.
+     */
+    bool testTraceMask(TraceMask iMask) const
+    {
+        if (!initalized_)
+            return false;
         
         const uint64_t priorityMask = 0xF000000000000000;
         
@@ -361,7 +514,7 @@ public:
         //
         if ((iMask & priorityMask) == kPriority_Off)
         {
-            return;
+            return false;
         }
         
         bool doTrace = false;
@@ -371,7 +524,10 @@ public:
         if (traceAll_)
         {
             if (traceAllPriority_ == kPriority_Off)
-                return;
+                return false;
+            
+            if (kPriority_Always == traceAllPriority_)
+                doTrace = true;
             
             if (iMask >= traceAllPriority_)
                 doTrace = true;
@@ -388,6 +544,12 @@ public:
                 //
                 if ((mask & kCategory_Always) == (iMask & kCategory_Always))
                 {
+                    if (kPriority_Always == (mask & priorityMask))
+                    {
+                        doTrace = true;
+                        break;
+                    }
+                    
                     // Check the priority
                     //
                     if ((iMask & priorityMask) >= (mask & priorityMask))
@@ -398,34 +560,9 @@ public:
                 }
             }
         }
-        
-        if (doTrace)
-        {
-            va_list argList;
-            va_start(argList, iArgs);
-            
-            // Buffer to print the message to,
-            // must include terminiating character
-            //
-            char traceMessage[sTraceMessageSize];
-            memset(traceMessage, 0, sTraceMessageSize);
-            
-            vsnprintf(traceMessage, sTraceMessageSize, iArgs, argList);
-            
-            va_end(argList);
-            
-            if (callback_)
-            {
-                callback_(traceMessage);
-            }
-            else
-            {
-                std::cout << traceMessage << std::endl;
-            }
-        }
-    }
     
-private:
+        return doTrace;
+    }
     
     /**
      * Processes the configuration information.
@@ -442,22 +579,22 @@ private:
             // Fancy regex trimming
             //
             line = std::regex_replace(line, std::regex("^ +| +$|( ) +"), "$1");
-            
+
             // Check for # indicating a commented out value
             //
-            if (line.length() && line[0] == '#')
+            if ((line.length() == 0) || (line.length() && line[0] == '#'))
                 continue;
             
             // Split at the @
             //
             std::string categoryStr = line.substr(0, line.find("@"));
             std::string priorityStr = line.substr(line.find("@") + 1, line.length());
-            
+
             // Trim leading and trailing spaces
             //
             categoryStr = std::regex_replace(categoryStr, std::regex("^ +| +$|( ) +"), "$1");
             priorityStr = std::regex_replace(priorityStr, std::regex("^ +| +$|( ) +"), "$1");
-            
+
             Category category = stringToCategory(categoryStr);
             Priority priority = stringToPriority(priorityStr);
             
@@ -534,7 +671,7 @@ private:
         (
          logging::trivial::severity >= logging::trivial::info
          );
-        
+
         logging::add_common_attributes();
         
         // For a trace to make sure the file is created
@@ -548,7 +685,7 @@ private:
             std::cerr << "Failed to create boost log file!\n";
             return false;
         }
-        
+
         return true;
 #endif
     }
@@ -569,7 +706,7 @@ private:
     /// This is an optimization to prevent from processing
     /// the masks_ std::vector to determine if a TraceMask is set
     Priority traceAllPriority_{kPriority_Off};
-    
+
     /// List is registered TraceMasks
     /// Used to determine if a trace statement should be written
     std::vector<TraceMask> masks_;
