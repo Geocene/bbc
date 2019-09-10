@@ -526,12 +526,18 @@ public:
             }
         }
 
-        // Format and write the XML
-        //
-        xml_writer_settings<std::string> formatting(' ', 4);
-        write_xml(iStartupOptionsFile, optionsTree, std::locale(), formatting);
-        
-        return true;
+        try
+        {
+            // Format and write the XML
+            //
+            xml_writer_settings<std::string> formatting(' ', 4);
+            write_xml(iStartupOptionsFile, optionsTree, std::locale(), formatting);
+        }
+        catch(...)
+        {
+            std::cerr << "Failed to create default startup options file!\n";
+            return false;
+        }
 #else
         static_assert(false, "StartupOptions::initialize - Requires BBC_USE_BOOST!");
 #endif

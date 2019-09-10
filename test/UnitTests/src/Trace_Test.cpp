@@ -41,6 +41,8 @@ TEST(TraceTest, /*DISABLED_*/TraceTest_Test1)
     Trace::instance().initializeWithBuffer("    kCategory_Basic@kPriority_Low \n   #kCategory_Basic@kPriority_High\nkCategory_Basic@kPriority_Medium"
                                            , TestTraceCallback);
     
+    sExpectTrace = true;
+
     std::string worldStr = "world";
 
     BBC_TRACE(Trace::kPriority_Always | Trace::kCategory_Always, "Hello world!");
@@ -99,6 +101,60 @@ TEST(TraceTest, /*DISABLED_*/TraceTest_Test3)
     EXPECT_EQ(Trace::stringToCategory("kCategory_Basic"), Trace::kCategory_Basic);
     EXPECT_EQ(Trace::stringToCategory("kCategory_Always"), Trace::kCategory_Always);
 }
+
+
+TEST(TraceTest, /*DISABLED_*/TraceTest_TestMem)
+{
+    Trace::instance().initializeWithBuffer("kCategory_Always@kPriority_Always"
+                                           , TestTraceCallback);
+    
+    sExpectTrace = true;
+
+    char buf[10];
+    memset(buf, 0x0, sizeof(buf));
+    
+    Trace::instance().writeMemory(Trace::kPriority_Always | Trace::kPriority_Always
+                                  , buf
+                                  , sizeof(buf)
+                                  , "kCategory_Always@kPriority_Always");
+
+    BBC_TRACE_MEM(Trace::kPriority_Always | Trace::kPriority_Always
+                  , buf
+                  , sizeof(buf)
+                  , "kCategory_Always@kPriority_Always");
+    
+    Trace::instance().writeMemory(Trace::kPriority_Always | Trace::kPriority_Always
+                                  , buf
+                                  , sizeof(buf));
+
+    BBC_TRACE_MEM(Trace::kPriority_Always | Trace::kPriority_Always
+                  , buf
+                  , sizeof(buf));
+
+    memset(buf, 0xff, sizeof(buf));
+
+    Trace::instance().writeMemory(Trace::kPriority_Always | Trace::kPriority_Always
+                                  , buf
+                                  , sizeof(buf)
+                                  , "kCategory_Always@kPriority_Always");
+    
+    BBC_TRACE_MEM(Trace::kPriority_Always | Trace::kPriority_Always
+                  , buf
+                  , sizeof(buf)
+                  , "kCategory_Always@kPriority_Always");
+    
+    Trace::instance().writeMemory(Trace::kPriority_Always | Trace::kPriority_Always
+                                  , buf
+                                  , sizeof(buf));
+    
+    BBC_TRACE_MEM(Trace::kPriority_Always | Trace::kPriority_Always
+                  , buf
+                  , sizeof(buf));
+
+    Trace::instance().reset();
+}
+
+
 
 TEST(TraceTest, TraceTest_CategoryAll_Priority_Off)
 {

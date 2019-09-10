@@ -46,8 +46,10 @@ namespace keywords = boost::log::keywords;
 
 #ifdef BBC_DEBUG
 #define BBC_TRACE(mask, ...) BBC_MACRO_BLOCK(Trace::instance().writeTrace(mask, __VA_ARGS__);)
+#define BBC_TRACE_MEM(mask, ...) BBC_MACRO_BLOCK(Trace::instance().writeMemory(mask, __VA_ARGS__);)
 #else
 #define BBC_TRACE(...)
+#define BBC_TRACE_MEM(...)
 #endif
 
 /*
@@ -63,6 +65,7 @@ namespace keywords = boost::log::keywords;
 */
 
 #define BBC_TRACE_R(mask, ...) BBC_MACRO_BLOCK(Trace::instance().writeTrace(mask, __VA_ARGS__);)
+#define BBC_TRACE_MEM_R(mask, ...) BBC_MACRO_BLOCK(Trace::instance().writeMemory(mask, __VA_ARGS__);)
 
 #define BBC_BOOL_TO_STRING(x) x ? "true" : "false"
 
@@ -111,7 +114,6 @@ public:
           kCategory_Off                 = 0x0000000000000000
         
         , kCategory_Basic               = 0x0000000000000001
-        , kCategory_CommMgr             = 0x0000000000000002
 
         , kCategory_Always              = 0x0FFFFFFFFFFFFFFF
     };
@@ -186,9 +188,8 @@ if (iCategory == iVal) \
     {
         CATEGORY_TO_STRING(kCategory_Off);
         CATEGORY_TO_STRING(kCategory_Basic);
-        CATEGORY_TO_STRING(kCategory_CommMgr);
         CATEGORY_TO_STRING(kCategory_Always);
-        
+
         BBC_ASSERT_R(!"categoryAsString - unknown iCategory!");
         
         // Satisfy the return value
@@ -212,9 +213,8 @@ if (0 == strcmp(iStr.c_str(), STRINGIFY(iVal))) \
     {
         STRING_TO_CATEGORY(kCategory_Off);
         STRING_TO_CATEGORY(kCategory_Basic);
-        STRING_TO_CATEGORY(kCategory_CommMgr);
         STRING_TO_CATEGORY(kCategory_Always);
-        
+
         BBC_ASSERT_R(!"stringToCategory - unknown iStr!");
         
         // Satisfy the return value
@@ -347,6 +347,119 @@ public:
         callback_ = nullptr;
     }
 
+    
+    /**
+     * Writes a statement to Trace
+     *
+     * @param[in] iMask the masking information for the statement to be traced
+     */
+    void writeMemory(TraceMask iMask, void* iBuffer, int32_t iLength) const
+    {
+        if (!testTraceMask(iMask))
+            return;
+        
+        // Print the memory buffer in hex
+        // must include terminiating character
+        //
+        char traceMessage[sTraceMessageSize];
+        memset(traceMessage, 0, sTraceMessageSize);
+        
+        for (int i = 0; i < iLength; i++)
+        {
+            char tmp = static_cast<char*>(iBuffer)[i];
+            
+            // Print with a space in between hex characters
+            // Example: FF FF FF FF
+            //
+            snprintf(traceMessage + (i*3), sTraceMessageSize - (i*3), "%02X ", (unsigned char)tmp);
+        }
+        
+        // Delete the trailing space
+        //
+        size_t len = strlen(traceMessage);
+        if (len > 0)
+        {
+            memset(traceMessage + (len - 1), 0x0, 1);
+        }
+        
+        if (callback_)
+        {
+            callback_(traceMessage);
+        }
+        else
+        {
+            std::cout << traceMessage << std::endl;
+        }
+    }
+    /**
+     * Writes a statement to Trace
+     *
+     * @param[in] iMask the masking information for the statement to be traced
+     * @param[in] iArgs arguments to be traced, printf style.
+     */
+    void writeMemory(TraceMask iMask, void* iBuffer, int32_t iLength, const char* iArgs...) const
+    {
+        if (!testTraceMask(iMask))
+            return;
+        
+        // Print the memory buffer in hex
+        // must include terminiating character
+        //
+        char memBuffer[sTraceMessageSize];
+        memset(memBuffer, 0, sTraceMessageSize);
+        
+        for (int i = 0; i < iLength; i++)
+        {
+            char tmp = static_cast<char*>(iBuffer)[i];
+            
+            // Print with a space in between hex characters
+            // Example: FF FF FF FF
+            //
+            snprintf(memBuffer + (i*3), sTraceMessageSize - (i*3), "%02X ", (unsigned char)tmp);
+        }
+
+        // Buffer to print the message to,
+        // must include terminiating character
+        //
+        char traceMessage[sTraceMessageSize];
+        memset(traceMessage, 0, sTraceMessageSize);
+
+        // Print the message
+        //
+        va_list argList;
+        va_start(argList, iArgs);
+        
+        vsnprintf(traceMessage, sTraceMessageSize, iArgs, argList);
+        
+        va_end(argList);
+        
+        // Copy over the memory printout
+        // Note - don't copy over the last character which is a trailing space
+        //
+        size_t len = strlen(traceMessage);
+        if (len > 0)
+        {
+            // Add in a separator for the message
+            //
+            snprintf(traceMessage + len, sTraceMessageSize - len, " - ");
+
+            // Update the length
+            //
+            len = strlen(traceMessage);
+        }
+        
+        memcpy(traceMessage + len, memBuffer, (iLength*3) - 1);
+        
+        if (callback_)
+        {
+            callback_(traceMessage);
+        }
+        else
+        {
+            std::cout << traceMessage << std::endl;
+        }
+    }
+
     /**
      * Writes a statement to Trace
      *
@@ -355,8 +468,45 @@ public:
      */
     void writeTrace(TraceMask iMask, const char* iArgs...) const
     {
-        if (!initalized_)
+        if (!testTraceMask(iMask))
             return;
+       
+        va_list argList;
+        va_start(argList, iArgs);
+        
+        // Buffer to print the message to,
+        // must include terminiating character
+        //
+        char traceMessage[sTraceMessageSize];
+        memset(traceMessage, 0, sTraceMessageSize);
+        
+        vsnprintf(traceMessage, sTraceMessageSize, iArgs, argList);
+        
+        va_end(argList);
+
+        if (callback_)
+        {
+            callback_(traceMessage);
+        }
+        else
+        {
+            std::cout << traceMessage << std::endl;
+        }
+    }
+    
+private:
+    
+    /**
+     * Determines if the iMask has been enabled for tracing.
+     *
+     * @param[in] iMask mask to test
+     *
+     * @return true the iMask is enabled for tracing. false otherwise.
+     */
+    bool testTraceMask(TraceMask iMask) const
+    {
+        if (!initalized_)
+            return false;
         
         const uint64_t priorityMask = 0xF000000000000000;
         
@@ -364,7 +514,7 @@ public:
         //
         if ((iMask & priorityMask) == kPriority_Off)
         {
-            return;
+            return false;
         }
         
         bool doTrace = false;
@@ -374,7 +524,10 @@ public:
         if (traceAll_)
         {
             if (traceAllPriority_ == kPriority_Off)
-                return;
+                return false;
+            
+            if (kPriority_Always == traceAllPriority_)
+                doTrace = true;
             
             if (iMask >= traceAllPriority_)
                 doTrace = true;
@@ -391,6 +544,12 @@ public:
                 //
                 if ((mask & kCategory_Always) == (iMask & kCategory_Always))
                 {
+                    if (kPriority_Always == (mask & priorityMask))
+                    {
+                        doTrace = true;
+                        break;
+                    }
+                    
                     // Check the priority
                     //
                     if ((iMask & priorityMask) >= (mask & priorityMask))
@@ -401,34 +560,9 @@ public:
                 }
             }
         }
-        
-        if (doTrace)
-        {
-            va_list argList;
-            va_start(argList, iArgs);
-            
-            // Buffer to print the message to,
-            // must include terminiating character
-            //
-            char traceMessage[sTraceMessageSize];
-            memset(traceMessage, 0, sTraceMessageSize);
-            
-            vsnprintf(traceMessage, sTraceMessageSize, iArgs, argList);
-            
-            va_end(argList);
-
-            if (callback_)
-            {
-                callback_(traceMessage);
-            }
-            else
-            {
-                std::cout << traceMessage << std::endl;
-            }
-        }
-    }
     
-private:
+        return doTrace;
+    }
     
     /**
      * Processes the configuration information.
@@ -448,7 +582,7 @@ private:
 
             // Check for # indicating a commented out value
             //
-            if (line.length() && line[0] == '#')
+            if ((line.length() == 0) || (line.length() && line[0] == '#'))
                 continue;
             
             // Split at the @
